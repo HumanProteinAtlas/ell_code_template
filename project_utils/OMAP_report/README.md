@@ -1,0 +1,1 @@
+This script is used to generate a single Antibody Validation Report file by extracting the information from an Excel file, as is usually needed when submitting Organ Mapping Antibody Panels to the HubMap consortium. The report will be generated following the layout of the "avr-template-form_2.docx" file.
