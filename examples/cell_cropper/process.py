@@ -2,6 +2,7 @@ import datetime
 import logging
 import os
 import pandas as pd
+from pathlib import Path
 
 import cell_cropper
 import image_utils
@@ -38,25 +39,36 @@ if os.path.exists("./path_list.csv"):
 
     for curr_set in path_list:
         if curr_set.strip() != "" and not curr_set.startswith("#"):
-            curr_set_arr = curr_set.split(",")
-            # We create the output folder
-            os.makedirs(curr_set_arr[6].strip(), exist_ok=True)
-            # We load the images as numpy arrays
-            image_stack = []
-            image_stack.append([image_utils.read_grayscale_image(curr_set_arr[0].strip())])
-            image_stack.append([image_utils.read_grayscale_image(curr_set_arr[1].strip())])
-            image_stack.append([image_utils.read_grayscale_image(curr_set_arr[2].strip())])
-            image_stack.append([image_utils.read_grayscale_image(curr_set_arr[3].strip())])
+            curr_set_arr = [v.strip() for v in curr_set.split(",")]
+            # New format: cell_mask,nuclei_mask,crop_folder,output_prefix,image1,image2,...
+            cell_mask_path  = curr_set_arr[0]
+            nuclei_mask_path = curr_set_arr[1]
+            crop_folder     = curr_set_arr[2]
+            output_prefix   = curr_set_arr[3]
+            image_paths     = curr_set_arr[4:]
 
-            cell_mask = image_utils.read_grayscale_image(curr_set_arr[4].strip())
+            # We create the output folder
+            os.makedirs(crop_folder, exist_ok=True)
+
+            # Build image stack and derive per-image suffixes from filenames
+            image_stack = []
+            image_suffixes = []
+            for img_path in image_paths:
+                image_stack.append([image_utils.read_grayscale_image(img_path)])
+                stem = Path(img_path).stem  # filename without extension
+                suffix = stem[len(output_prefix):] if stem.startswith(output_prefix) else stem
+                image_suffixes.append(suffix)
+
+            cell_mask = image_utils.read_grayscale_image(cell_mask_path)
             nuclei_mask = None
-            if curr_set_arr[5].strip() != "":
-                nuclei_mask = image_utils.read_grayscale_image(curr_set_arr[5].strip())
+            if nuclei_mask_path != "":
+                nuclei_mask = image_utils.read_grayscale_image(nuclei_mask_path)
+
             # Single cell crops
-            cell_bbox_df = cell_cropper.generate_crops(image_stack, cell_mask, nuclei_mask, config["crop_size"], config["crop_bitdepth"], config["crop_mask"], config["mask_cell"], curr_set_arr[6].strip(), curr_set_arr[7].strip())
+            cell_bbox_df = cell_cropper.generate_crops(image_stack, image_suffixes, cell_mask, nuclei_mask, config["crop_size"], config["crop_bitdepth"], config["crop_mask"], config["mask_cell"], crop_folder, output_prefix)
             df = pd.concat([df, cell_bbox_df], ignore_index=True)
 
-            config["log"].info("- Saved results for " + curr_set_arr[7].strip())
+            config["log"].info("- Saved results for " + output_prefix)
 
     # We store the cell crops bboxes and ids for easy localization
     df.to_csv("crop_info.csv", index=False)

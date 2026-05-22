@@ -8,7 +8,6 @@ import cv2
 
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
-colors = ["red", "yellow", "blue", "green"]
 
 
 def safe_crop(image, bbox):
@@ -60,7 +59,7 @@ def safe_crop(image, bbox):
 
 
 # Optional code to generate the segmented cell crops
-def generate_crops(image_stack, cell_mask, nuclei_mask, crop_size, crop_bitdepth, crop_mask, mask_cell, output_folder, output_prefix):
+def generate_crops(image_stack, image_suffixes, cell_mask, nuclei_mask, crop_size, crop_bitdepth, crop_mask, mask_cell, output_folder, output_prefix):
     regions = regionprops(cell_mask)
 
     cell_bboxes = []
@@ -96,15 +95,16 @@ def generate_crops(image_stack, cell_mask, nuclei_mask, crop_size, crop_bitdepth
             if curr_img_index != 0:
                 image_cp = image_stack[curr_img_index][0].copy()
 
+            suffix = image_suffixes[curr_img_index]
             cell_crop, _ = safe_crop(image_cp, fixed_bbox)
-            cv2.imwrite(f"{output_folder}/{output_prefix}cell{region.label}_crop_" + colors[curr_img_index] + ".png", image_utils.convert_bitdepth(cell_crop, crop_bitdepth))
+            cv2.imwrite(f"{output_folder}/{output_prefix}cell{region.label}_crop_{suffix}.png", image_utils.convert_bitdepth(cell_crop, crop_bitdepth))
 
             if mask_cell:
                 this_cell_mask = cell_mask == region.label
                 this_cell_mask = grey_dilation(this_cell_mask, size=7)
                 image_cp[this_cell_mask == 0] = 0
                 cell_mask_crop, _ = safe_crop(image_cp, fixed_bbox)
-                cv2.imwrite(f"{output_folder}/{output_prefix}cell{region.label}_crop_masked_" + colors[curr_img_index] + ".png", image_utils.convert_bitdepth(cell_mask_crop, crop_bitdepth))
+                cv2.imwrite(f"{output_folder}/{output_prefix}cell{region.label}_crop_masked_{suffix}.png", image_utils.convert_bitdepth(cell_mask_crop, crop_bitdepth))
 
         new_center = (crop_size // 2, crop_size // 2)
         new_bbox = (
