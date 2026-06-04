@@ -81,7 +81,7 @@ def merge_segmentations(seg_nuclei, seg_cyto1, seg_cyto2, nuc_diameter):
 
 
 def segment(model_nuc, model_cyto, nuclei_img, cyto_img1, cyto_img2, nuc_diameter, cell_diameter, output_folder,
-            output_prefix):
+            output_prefix, model_cpsam=None, use_cpsam=False):
     channels = [1, 0]
     nuclei_masks, flows, styles = model_nuc.eval(
         np.stack([nuclei_img, np.zeros_like(nuclei_img)]),
@@ -90,31 +90,53 @@ def segment(model_nuc, model_cyto, nuclei_img, cyto_img1, cyto_img2, nuc_diamete
     )
     imsave(output_folder + "/" + output_prefix + "nuclei_mask.png", nuclei_masks)
 
-    channels = [1, 2]
     if cyto_img1 is not None:
         cell_masks = None
 
-        cyto1_masks, flows, styles = model_cyto.eval(
-            np.stack([sharpen(adaptive_hist(cyto_img1)), nuclei_masks]),
-            channels=channels,
-            diameter=cell_diameter,
-            flow_threshold=0.8,
-            cellprob_threshold=-0.4
-        )
-        imsave(output_folder + "/" + output_prefix + "cyto1_mask.png", cyto1_masks)
+        if use_cpsam and model_cpsam is not None:
+            # Single CellposeSAM forward pass on all channels stacked as (H, W, 3).
+            # The model sees nuclear + cyto1 + cyto2 simultaneously, so no secondary
+            # channel is needed in the merge step.
+            ch0 = sharpen(adaptive_hist(nuclei_img)).astype(np.float32)
+            ch1 = sharpen(adaptive_hist(cyto_img1)).astype(np.float32)
+            ch2 = sharpen(adaptive_hist(cyto_img2)).astype(np.float32) if cyto_img2 is not None \
+                  else np.zeros_like(ch0, dtype=np.float32)
+            rgb = np.stack([ch0, ch1, ch2], axis=-1)
 
-        if cyto_img2 is not None:
-            cyto2_masks, flows, styles = model_cyto.eval(
-                np.stack([sharpen(adaptive_hist(cyto_img2)), nuclei_masks]),
+            sam_masks, flows, styles = model_cpsam.eval(
+                rgb,
+                diameter=cell_diameter,
+                flow_threshold=0.8,
+                cellprob_threshold=-0.4,
+                normalize=False,
+            )
+            imsave(output_folder + "/" + output_prefix + "sam_raw_mask.png", sam_masks)
+
+            cell_masks = merge_segmentations(nuclei_masks, sam_masks, None, nuc_diameter)
+
+        else:
+            channels = [1, 2]
+            cyto1_masks, flows, styles = model_cyto.eval(
+                np.stack([sharpen(adaptive_hist(cyto_img1)), nuclei_masks]),
                 channels=channels,
                 diameter=cell_diameter,
                 flow_threshold=0.8,
                 cellprob_threshold=-0.4
             )
-            imsave(output_folder + "/" + output_prefix + "cyto2_mask.png", cyto2_masks)
+            imsave(output_folder + "/" + output_prefix + "cyto1_mask.png", cyto1_masks)
 
-            cell_masks = merge_segmentations(nuclei_masks, cyto1_masks, cyto2_masks, nuc_diameter)
-        else:
-            cell_masks = merge_segmentations(nuclei_masks, cyto1_masks, None, nuc_diameter)
+            if cyto_img2 is not None:
+                cyto2_masks, flows, styles = model_cyto.eval(
+                    np.stack([sharpen(adaptive_hist(cyto_img2)), nuclei_masks]),
+                    channels=channels,
+                    diameter=cell_diameter,
+                    flow_threshold=0.8,
+                    cellprob_threshold=-0.4
+                )
+                imsave(output_folder + "/" + output_prefix + "cyto2_mask.png", cyto2_masks)
+
+                cell_masks = merge_segmentations(nuclei_masks, cyto1_masks, cyto2_masks, nuc_diameter)
+            else:
+                cell_masks = merge_segmentations(nuclei_masks, cyto1_masks, None, nuc_diameter)
 
         imsave(output_folder + "/" + output_prefix + "cell_mask.png", cell_masks)

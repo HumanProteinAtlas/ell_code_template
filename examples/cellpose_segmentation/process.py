@@ -21,6 +21,11 @@ config["nuclei_only"] = False
 config["nuc_diameter"] = 100
 config["cyto_diameter"] = 150
 
+# Set use_cpsam = True to run CellposeSAM (single 3-channel inference) instead of
+# two separate cyto3 calls. Requires the 'cpsam' pretrained model to be available.
+config["use_cpsam"] = False
+config["gpu"] = False
+
 # Log the start time and the final configuration so you can keep track of what you did
 config["log"].info('Start: ' + datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S"))
 config["log"].info('Parameters used:')
@@ -29,8 +34,15 @@ config["log"].info('----------')
 
 
 # We load the model
-model_nuc = models.CellposeModel(gpu=False, model_type='nuclei')
-model_cyto = models.CellposeModel(gpu=False, model_type='cyto3')
+model_nuc = models.CellposeModel(gpu=config["gpu"], model_type='nuclei')
+model_cyto = None
+model_cpsam = None
+if config["use_cpsam"]:
+    model_cpsam = models.CellposeModel(pretrained_model='cpsam', gpu=config["gpu"])
+    config["log"].info('Using CellposeSAM (cpsam) for cell segmentation')
+else:
+    model_cyto = models.CellposeModel(gpu=config["gpu"], model_type='cyto3')
+    config["log"].info('Using cyto3 for cell segmentation')
 
 # If we provide a "path_list.csv" file, we run our code for each pair of input/output sub-folders
 if os.path.exists("./path_list.csv"):
@@ -52,7 +64,7 @@ if os.path.exists("./path_list.csv"):
                     cyto_img2 = image_utils.read_grayscale_image(curr_set_arr[2].strip())
 
             # Segmentation
-            cellpose_segmentation.segment(model_nuc, model_cyto, nuclei_img, cyto_img1, cyto_img2, config["nuc_diameter"], config["cyto_diameter"], curr_set_arr[3].strip(), curr_set_arr[4].strip())
+            cellpose_segmentation.segment(model_nuc, model_cyto, nuclei_img, cyto_img1, cyto_img2, config["nuc_diameter"], config["cyto_diameter"], curr_set_arr[3].strip(), curr_set_arr[4].strip(), model_cpsam=model_cpsam, use_cpsam=config["use_cpsam"])
 
             config["log"].info("- Saved results for " + curr_set_arr[4].strip())
 
