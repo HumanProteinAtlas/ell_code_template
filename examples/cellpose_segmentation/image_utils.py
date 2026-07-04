@@ -23,6 +23,8 @@ def convert_bitdepth(image, bitdepth):
 
 def read_grayscale_image(input_image, force_channel = -1, force_bit_depth = 0, minmax_norm = False):
     np_img = cv2.imread(input_image, -1)
+    if np_img is None:
+        return None
     if force_channel != -1:
         np_img = np_img[:, :, force_channel]
     elif np_img.ndim > 2:
