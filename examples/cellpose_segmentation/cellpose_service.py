@@ -73,6 +73,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cellpose-service")
 
+class InvalidImageError(ValueError):
+    pass
 
 class AnalyzerInterface(ABC):
 
@@ -139,6 +141,8 @@ class Analyzer(AnalyzerInterface):
                 "version": self.cellpose_version,
             }
             return result
+        except InvalidImageError as e:
+            return {"status": "error", "message": str(e)}
         finally:
             shutil.rmtree(work_out, ignore_errors=True)
             for p in tmp_inputs:
@@ -154,6 +158,8 @@ class Analyzer(AnalyzerInterface):
 
         nuclei_img = image_utils.read_grayscale_image(str(nuclei_path))
         cyto_img1 = image_utils.read_grayscale_image(str(cytosol_path))
+        if cyto_img1.shape != nuclei_img.shape:
+            raise InvalidImageError("Images must have the same shape")
         self._segment_impl(
             model_nuc=self.model_nuc,
             model_cyto=self.model_cyto,

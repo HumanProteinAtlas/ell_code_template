@@ -158,6 +158,8 @@ class CellposeService:
             body = e.read().decode("utf-8")
             ret = json.loads(body)
             raise RuntimeError(f"Failed to segment: {str(e)} - {ret['message']}")
+        if resp.get("status") != "ok":
+            raise ValueError(f"Failed to segment: {resp.get('message')}")
 
         if save_to and resp.get("outputs"):
             import base64
@@ -198,10 +200,13 @@ if __name__ == "__main__":
             print("segment:", i)
             nuc = f"{i}_blue.tif"
             cyto = f"{i}_red.tif"
-            r = svc.segment(i,
+            try:
+                r = svc.segment(i,
                             nuclei_file=nuc, nuclei_diameter=30,
                             cytosol_file=cyto, cytosol_diameter=60,
                             send_data=True,
                             save_to="test")
+            except ValueError as e:
+                print(e)
             # print("path-based outputs:", [(o["name"], len(o["data"])) for o in r["outputs"]])
             print("files on disk:", os.listdir("test"))
